@@ -2,7 +2,6 @@ import streamlit as st
 
 st.set_page_config(page_title='Concert Prep', page_icon=':musical_note:')
 
-auth_code = ""
 if 'code' in st.query_params:
     auth_code = st.query_params['code']
     st.session_state.auth_code = auth_code

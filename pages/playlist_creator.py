@@ -155,6 +155,8 @@ if artist_input != "":
                 st.write("**Song Preview:** N/A")
 
             if st.button(":rainbow[**Vibe Check This Artist!**]"):
+                st.session_state.artist_name = artist_name
+                st.session_state.artist_id = artist_id
                 st.switch_page("pages/vibe_checker.py")
 
         with col2:
