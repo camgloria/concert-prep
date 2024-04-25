@@ -3,7 +3,7 @@ import requests
 import pandas as pd
 import folium
 
-tm_key = "noF5kg6nwwXGlQ4UCnwm9YHGB8ADCjSt"
+api_key = "noF5kg6nwwXGlQ4UCnwm9YHGB8ADCjSt"
 
 @st.cache_data
 def generate_list_of_events_by_areacode_and_artist(state_code, attractionID):

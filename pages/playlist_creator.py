@@ -124,7 +124,6 @@ if artist_input != "":
             st.subheader(artist_name)
 
             artist_uri = search_dict["artists"]["items"][artist_index]["uri"]
-            #hy.text(artist_uri)
 
             genres = set()
             for i in range(len(search_dict["artists"]["items"][artist_index]["genres"])):
@@ -386,4 +385,5 @@ if artist_input != "":
                             else:
                                 st.error(error_message)
                         except Exception as e:
-                            st.warning("Something went wrong. Playlist added with default image.")
+                            st.warning("Something went wrong.")
+                            st.write(e)

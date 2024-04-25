@@ -34,6 +34,8 @@ artist_input = form.text_input("**Search for an Artist**", placeholder="Enter ar
 search = form.form_submit_button(label='Search')
 
 def vibe_chart(artist_name, artist_id):
+    tab1, tab2 = st.tabs(["Bar Graph", "Line Graph"])
+
     tracks_response = requests.get(spotify_base_url + 'artists/{id}/top-tracks'.format(id=artist_id),
                                    headers=headers)
     tracks_dict = tracks_response.json()
@@ -55,7 +57,7 @@ def vibe_chart(artist_name, artist_id):
         valence = audio_features_dict["audio_features"][i]["valence"] * 100.0
         liveness = audio_features_dict["audio_features"][i]["liveness"] * 100.0
         track_data = {
-            'Track Name': track['name'],
+            'Song Name': "\"" + track['name'] + "\"",
             'Popularity': track['popularity'],
             'Danceability': danceability,
             'Energy': energy,
@@ -68,13 +70,18 @@ def vibe_chart(artist_name, artist_id):
 
     st.divider()
 
-    st.subheader(artist_name + " Vibe Chart")
     # line chart with point markers and y-axis label
-    fig = px.line(tracks_df, x="Track Name", y=["Popularity", "Danceability", "Energy", "Valence", "Liveness"],
-                  color_discrete_sequence=["#43B3FF", "#A020F0", "#FF69B4", "#2CE5C3", "#1F53E0"])
-    fig.update_traces(mode='lines+markers')
-    fig.update_layout(width=800, height=500, yaxis_title="Rating")
-    st.plotly_chart(fig)
+    with tab1:
+        fig = px.bar(tracks_df, x="Song Name", y=["Popularity", "Danceability", "Energy", "Valence", "Liveness"],
+                      color_discrete_sequence=["#43B3FF", "#A020F0", "#FF69B4", "#2CE5C3", "#1F53E0"], title=f"{artist_name}: Vibes for Top 10 Songs".format(artist_name=artist_name))
+        fig.update_layout(width=800, height=500, yaxis_title="Rating")
+        st.plotly_chart(fig)
+    with tab2:
+        fig = px.line(tracks_df, x="Song Name", y=["Popularity", "Danceability", "Energy", "Valence", "Liveness"],
+                      color_discrete_sequence=["#43B3FF", "#A020F0", "#FF69B4", "#2CE5C3", "#1F53E0"], title=f"{artist_name}: Vibes for Top 10 Songs".format(artist_name=artist_name))
+        fig.update_traces(mode='lines+markers')
+        fig.update_layout(width=800, height=500, yaxis_title="Rating")
+        st.plotly_chart(fig)
 
 artist_name = artist_id = ""
 
@@ -95,8 +102,21 @@ if artist_input != "":
     search_dict = search_response.json()
 
     artist_results = []
+    artist_dict_indices = []
     for i in range(len(search_dict.get("artists").get("items"))):
-        artist_results.append(search_dict["artists"]["items"][i]["name"])
+        # exclude artists with no top songs (only check low popularity to decrease number of API calls)
+        if search_dict["artists"]["items"][i]["popularity"] <= 25:
+            id = search_dict["artists"]["items"][i]["id"]
+            t_response = requests.get(spotify_base_url + 'artists/{id}/top-tracks'.format(id=id),
+                                      headers=headers)
+            t_dict = t_response.json()
+
+            if len(t_dict["tracks"]) > 2:
+                artist_results.append(search_dict["artists"]["items"][i]["name"])
+                artist_dict_indices.append(i)
+        else:
+            artist_results.append(search_dict["artists"]["items"][i]["name"])
+            artist_dict_indices.append(i)
 
     # format func allows us to save index of the option that is chosen instead of the option label (makes more sense in this case)
     artist_index = st.selectbox("**Select Artist**", range(len(artist_results)),
@@ -104,10 +124,12 @@ if artist_input != "":
 
     if artist_index != None:
         artist_name = artist_results[artist_index]
+        artist_index = artist_dict_indices[artist_index]
         artist_id = search_dict["artists"]["items"][artist_index]["id"]
 
         vibe_chart(artist_name, artist_id)
 
+# implement automatic search for the selected artist
 if artist_input != "" and artist_id != "":
     if st.button(":rainbow[**Create Playlist For This Artist!**]"):
         st.session_state.artist_name = artist_name
