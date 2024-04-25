@@ -88,6 +88,7 @@ if artist_input != "":
     search_dict = search_response.json()
 
     artist_results = []
+    artist_dict_indices = []
     for i in range(len(search_dict.get("artists").get("items"))):
         # exclude artists with no top songs (only check low popularity to decrease number of API calls)
         if search_dict["artists"]["items"][i]["popularity"] <= 25:
@@ -98,8 +99,10 @@ if artist_input != "":
 
             if len(t_dict["tracks"]) > 2:
                 artist_results.append(search_dict["artists"]["items"][i]["name"])
+                artist_dict_indices.append(i)
         else:
             artist_results.append(search_dict["artists"]["items"][i]["name"])
+            artist_dict_indices.append(i)
 
     # format func allows us to save index of the option that is chosen instead of the option label (makes more sense in this case)
     artist_index = st.selectbox("**Select Artist**", range(len(artist_results)),
@@ -107,6 +110,7 @@ if artist_input != "":
 
     if artist_index != None:
         artist_name = artist_results[artist_index]
+        artist_index = artist_dict_indices[artist_index]
         artist_id = search_dict["artists"]["items"][artist_index]["id"]
 
         tracks_response = requests.get(spotify_base_url + 'artists/{id}/top-tracks'.format(id=artist_id),
@@ -165,35 +169,6 @@ if artist_input != "":
             else:
                 artist_image_url = "https://t4.ftcdn.net/jpg/00/64/67/63/360_F_64676383_LdbmhiNM6Ypzb3FM4PPuFP9rHe7ri8Ju.jpg"
             st.image(artist_image_url)
-
-        st.divider()
-
-        st.write("**Top Albums to Include in Playlist:**")
-        albums = {}
-        # since we can't fetch every album's top songs, only include albums that have a top track for that artist
-        for i in range(len(tracks_dict["tracks"])):
-            album = tracks_dict["tracks"][i]["album"]["name"]
-            if album not in albums:
-                # dict keys: album name, dict values: if an album is selected or not
-                albums[album] = st.checkbox("\"" + album + "\"", value=True)
-
-        # getting the song duration for the tracks and adding date formatting
-        for i, track in enumerate(tracks_dict['tracks']):
-            tracks_dict['tracks'][i]['duration_ms'] = pd.to_datetime(tracks_dict['tracks'][i]['duration_ms'],
-                                                                     unit='ms').strftime('%M:%S')
-
-        # creating the dataframe for the playlist preview table
-        tracks_data = []
-        for track in tracks_dict['tracks']:
-            track_data = {
-                'Track Name': track['name'],
-                'Album Name': track['album']['name'],
-                'Release Date': track['album']['release_date'],
-                'Duration': track['duration_ms'],
-                'Track URI': track['uri']
-            }
-            tracks_data.append(track_data)
-        df_tracks = pd.DataFrame(tracks_data)
 
         st.divider()
 
@@ -258,86 +233,157 @@ if artist_input != "":
 
         playlist_description = st.text_area("**Playlist Description**",
                                             placeholder="Add an optional description for your playlist")
+        st.divider()
 
-        num_songs = st.number_input("**Playlist Song Count (max. 10 songs)**", value=10, min_value=2, max_value=10,
+        num_songs = st.number_input("**Playlist Song Count (max. 50 songs)**", value=20, min_value=10, max_value=50,
                                     placeholder="Enter the number of songs to be added to your playlist")
 
-        # filter tracks based on selected albums
-        selected_albums = [album for album, selected in albums.items() if selected]
-        df_filtered_tracks = df_tracks[df_tracks['Album Name'].isin(selected_albums)]
-
-        if len(df_filtered_tracks) < num_songs:
-            st.warning("Unable to create a playlist with {num_songs} songs due to selected album filters.".format(
-                num_songs=num_songs))
-            num_songs = len(df_filtered_tracks)
-
-        st.divider()
-
-        col5, col6 = st.columns([2, 1])
-        with col5:
-            st.header("**Playlist Preview**")
-            if playlist_name != "":
-                st.subheader(playlist_name)
-            else:
-                st.subheader("**Name:** N/A")
-            if playlist_description != "":
-                st.write("**Description:** " + playlist_description)
-            else:
-                st.write("**Description:** N/A")
-
-        with col6:
-            st.image(cover_preview)
-
         st.write("\n")
+        st.write("**Top Albums to Include in Playlist:**")
+        albums = {}
+        # since we can't fetch every album's top songs, only include albums that have a top track for that artist
+        for i in range(len(tracks_dict["tracks"])):
+            album = tracks_dict["tracks"][i]["album"]["name"]
+            album_id = tracks_dict["tracks"][i]["album"]["id"]
+            if album_id not in albums:
+                # dict keys: album ID, dict values: if an album is selected or not
+                albums[album_id] = st.checkbox("\"" + album + "\"", value=True)
 
-        # display DataFrame as a table with indices starting from 1
-        df_filtered_tracks.reset_index(drop=True, inplace=True)
-        df_filtered_tracks.index += 1
-        st.dataframe(df_filtered_tracks.head(num_songs), use_container_width=True)
+        selected_albums = [album for album, selected in albums.items() if selected]
 
-        # Iterate over the DataFrame rows and get the track URIs
-        track_uris = []
-        empty_playlist = False
-        if len(df_filtered_tracks) == 0:
-            st.error("Your playlist is empty! Please update your selected album filters.".format(num_songs=num_songs))
-            empty_playlist = True
+        album_ids = ""
+        for album in selected_albums:
+            album_ids += album + ','
+
+        album_ids = album_ids[:len(album_ids) - 1]
+
+        # get more songs from selected albums to populate playlist (will return in order of decreasing popularity)
+        albums_response = requests.get(spotify_base_url + 'albums?ids={ids}'.format(ids=album_ids),
+                                       headers=headers)
+        albums_dict = albums_response.json()
+
+        if "albums" not in albums_dict:
+            st.error("Selected artist has no albums.")
         else:
-            for index, row in df_filtered_tracks.iterrows():
-                track_uri = row['Track URI']
-                track_uris.append(track_uri)
-                if index - 1 == num_songs - 1:
-                    break
+            # convert duration (ms) to minutes and seconds for tracks
+            for i, track in enumerate(tracks_dict['tracks']):
+                tracks_dict['tracks'][i]['duration_ms'] = pd.to_datetime(tracks_dict['tracks'][i]['duration_ms'],
+                                                                         unit='ms').strftime('%M:%S')
+            for i, album in enumerate(albums_dict['albums']):
+                for j, track in enumerate(albums_dict['albums'][i]['tracks']['items']):
+                    albums_dict['albums'][i]['tracks']['items'][j]['duration_ms'] = pd.to_datetime(
+                        albums_dict['albums'][i]['tracks']['items'][j]['duration_ms'], unit='ms').strftime('%M:%S')
 
-        st.divider()
+            tracks_data = []
+            track_ids = set()
+            # add data from top 10 songs from top albums to be the minimum 10
+            for track in tracks_dict['tracks']:
+                track_data = {
+                    'Track Name': track['name'],
+                    'Album Name': track['album']['name'],
+                    'Release Date': track['album']['release_date'],
+                    'Duration': track['duration_ms'],
+                    'Track URI': track['uri']
+                }
+                tracks_data.append(track_data)
+                track_ids.add(track["id"])
 
-        # adding playlist to the user's spotify account logic
-        if auth_code != "" and not empty_playlist:
-            st.subheader("Add to Spotify")
-            username_form = st.form("username")
-            username = username_form.text_input("**Spotify Username**", placeholder="Enter your username to continue.")
-            add_playlist = username_form.form_submit_button(label='Add Playlist')
-            if username != "":
-                if add_playlist:
-                    try:
-                        img_byte_arr = io.BytesIO()
-                        playlist_cover.save(img_byte_arr, format='JPEG')
-                        img_byte_arr = img_byte_arr.getvalue()
-                        encoded_img = base64.b64encode(img_byte_arr).decode()
+            other_tracks_data = []
+            # add data from other songs from top albums (up to max songs defined by user)
+            for i, album in enumerate(albums_dict['albums']):
+                for track in albums_dict['albums'][i]['tracks']['items']:
+                    track_data = {
+                        'Track Name': track['name'],
+                        'Album Name': album['name'],
+                        'Release Date': album['release_date'],
+                        'Duration': track['duration_ms'],
+                        'Track URI': track['uri']
+                    }
+                    if track["id"] not in track_ids:
+                        other_tracks_data.append(track_data)
+                        track_ids.add(track["id"])
 
-                        playlist = sp.user_playlist_create(username, playlist_name, description=playlist_description)
-                        sp.playlist_add_items(playlist['id'], track_uris)
-                        sp.playlist_upload_cover_image(playlist['id'], encoded_img)
-                        st.success(f'Playlist "{playlist_name}" successfully created and added to your Spotify!')
-                    except SpotifyException as se:
-                        error_message = se.msg
-                        if "cannot create a playlist for another user" in error_message:
-                            st.error("Could not add playlist. Make sure your username is correct.")
-                        elif "not registered in the Developer Dashboard" in error_message:
-                            st.info("Could not add playlist. Our app is currently in development, so users must be "
-                                    "registered on our Spotify Developer Dashboard in order to use the app as intended.")
-                        elif "Max Retries" in error_message:
-                            st.error("Rate limit reached. Please wait a while before trying again.")
-                        else:
-                            st.error(error_message)
-                    except Exception as e:
-                        st.warning("Something went wrong. Playlist added with default image.")
+            # create dataframe for playlist preview table
+            df_tracks = pd.DataFrame(tracks_data)
+            df_other_tracks = pd.DataFrame(other_tracks_data)
+
+            # randomize order so there is a mix of selected albums
+            df_other_tracks = df_other_tracks.sample(frac=1.0, random_state=42)
+
+            df_tracks = pd.concat([df_tracks, df_other_tracks])
+
+            if len(df_tracks) < num_songs:
+                st.warning("Unable to create a playlist with {num_songs} songs due to selected album filters.".format(
+                    num_songs=num_songs))
+                num_songs = len(df_tracks)
+
+            st.divider()
+
+            col5, col6 = st.columns([2, 1])
+            with col5:
+                st.header("**Playlist Preview**")
+                if playlist_name != "":
+                    st.subheader(playlist_name)
+                else:
+                    st.subheader("**Name:** N/A")
+                if playlist_description != "":
+                    st.write("**Description:** " + playlist_description)
+                else:
+                    st.write("**Description:** N/A")
+
+            with col6:
+                st.image(cover_preview)
+
+            st.write("\n")
+
+            # display DataFrame as a table with indices starting from 1
+            df_tracks.reset_index(drop=True, inplace=True)
+            df_tracks.index += 1
+            st.dataframe(df_tracks.head(num_songs), use_container_width=True)
+
+            # Iterate over the DataFrame rows and get the track URIs
+            track_uris = []
+            empty_playlist = False
+            if len(df_tracks) == 0:
+                st.error("Your playlist is empty! Please update your selected album filters.".format(num_songs=num_songs))
+                empty_playlist = True
+            else:
+                for i, row in df_tracks.iterrows():
+                    track_uri = row['Track URI']
+                    track_uris.append(track_uri)
+                    if i - 1 == num_songs - 1:
+                        break
+
+            st.divider()
+
+            # adding playlist to the user's spotify account logic
+            if auth_code != "" and not empty_playlist:
+                st.subheader("Add to Spotify")
+                username_form = st.form("username")
+                username = username_form.text_input("**Spotify Username**", placeholder="Enter your username to continue.")
+                add_playlist = username_form.form_submit_button(label='Add Playlist')
+                if username != "":
+                    if add_playlist:
+                        try:
+                            img_byte_arr = io.BytesIO()
+                            playlist_cover.save(img_byte_arr, format='JPEG')
+                            img_byte_arr = img_byte_arr.getvalue()
+                            encoded_img = base64.b64encode(img_byte_arr).decode()
+
+                            playlist = sp.user_playlist_create(username, playlist_name, description=playlist_description)
+                            sp.playlist_add_items(playlist['id'], track_uris)
+                            sp.playlist_upload_cover_image(playlist['id'], encoded_img)
+                            st.success(f'Playlist "{playlist_name}" successfully created and added to your Spotify!')
+                        except SpotifyException as se:
+                            error_message = se.msg
+                            if "cannot create a playlist for another user" in error_message:
+                                st.error("Could not add playlist. Make sure your username is correct.")
+                            elif "not registered in the Developer Dashboard" in error_message:
+                                st.info("Could not add playlist. Our app is currently in development, so users must be "
+                                        "registered on our Spotify Developer Dashboard in order to use the app as intended.")
+                            elif "Max Retries" in error_message:
+                                st.error("Rate limit reached. Please wait a while before trying again.")
+                            else:
+                                st.error(error_message)
+                        except Exception as e:
+                            st.warning("Something went wrong. Playlist added with default image.")
