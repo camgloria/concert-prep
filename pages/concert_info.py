@@ -3,17 +3,17 @@ import requests
 import pandas as pd
 import folium
 
-api_key = "noF5kg6nwwXGlQ4UCnwm9YHGB8ADCjSt"
+tm_key = "noF5kg6nwwXGlQ4UCnwm9YHGB8ADCjSt"
 
 @st.cache_data
 def generate_list_of_events_by_areacode_and_artist(state_code, attractionID):
-    events_nearby_list_url = f"https://app.ticketmaster.com/discovery/v2/events.json?size=30&attractionId={attractionID}&stateCode={state_code}&apikey={api_key}"
+    events_nearby_list_url = f"https://app.ticketmaster.com/discovery/v2/events.json?size=30&attractionId={attractionID}&stateCode={state_code}&apikey={tm_key}"
     events_nearby_list_dict = requests.get(events_nearby_list_url).json()
     return events_nearby_list_dict
 
 @st.cache_data
 def get_list_of_artists(artist):
-    artist_list_url = f"https://app.ticketmaster.com/discovery/v2/attractions.json?classificationName=Music&keyword={artist}&apikey={api_key}"
+    artist_list_url = f"https://app.ticketmaster.com/discovery/v2/attractions.json?classificationName=Music&keyword={artist}&apikey={tm_key}"
     artist_list_dict = requests.get(artist_list_url).json()
     return artist_list_dict
 

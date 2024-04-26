@@ -358,9 +358,11 @@ if artist_input != "":
             # adding playlist to the user's spotify account logic
             if auth_code != "" and not empty_playlist:
                 st.subheader("Add to Spotify")
-                username_form = st.form("username")
-                username = username_form.text_input("**Spotify Username**", placeholder="Enter your username to continue.")
-                add_playlist = username_form.form_submit_button(label='Add Playlist')
+                user_dict = sp.me()
+                username = user_dict["id"]
+                st.write("**You are currently logged in as:** " + username)
+                add_playlist = st.button('Add Playlist')
+
                 if username != "":
                     if add_playlist:
                         try:
