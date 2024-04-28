@@ -87,9 +87,8 @@ st.sidebar.page_link("pages/playlist_creator.py", label="Playlist Creator", icon
 st.sidebar.page_link("pages/concert_info.py", label="Concert Info", icon="🎸")
 st.sidebar.page_link("pages/vibe_checker.py", label="Vibe Checker", icon="🎶")
 
-login = st.button("Log in to Spotify")
-if login:
-    webbrowser.open_new_tab(auth_url)
+login = st.link_button("Log in to Spotify", auth_url)
+
 auth_code = ""
 if "auth_code" in st.session_state:
     auth_code = st.session_state.auth_code
