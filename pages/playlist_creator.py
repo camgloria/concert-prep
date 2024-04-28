@@ -10,6 +10,30 @@ import io
 from io import BytesIO
 import base64
 
+
+@st.cache_data
+def get_artist_results(artist_input):
+    # search for artist based on text input (name), limited to 10 results
+    search_response = requests.get(
+        spotify_base_url + 'search?q={artist_name}&type=artist&limit=10'.format(artist_name=artist_input),
+        headers=headers)
+    return search_response.json()
+
+@st.cache_data
+def get_top_tracks(artist_id):
+    tracks_response = requests.get(spotify_base_url + 'artists/{id}/top-tracks'.format(id=artist_id),
+                              headers=headers)
+    return tracks_response.json()
+
+
+@st.cache_data
+def get_albums(album_ids):
+    # get more songs from selected albums to populate playlist (will return in order of decreasing popularity)
+    albums_response = requests.get(spotify_base_url + 'albums?ids={ids}'.format(ids=album_ids),
+                                   headers=headers)
+    return albums_response.json()
+
+
 def set_default_cover():
     if artist_image_url != "":
         return get_image_from_url(artist_image_url)
@@ -17,6 +41,7 @@ def set_default_cover():
         return "default-playlist-cover.png"
 
 
+@st.cache_data()
 def get_image_from_url(image_url):
     try:
         image_response = requests.get(image_url)
@@ -81,11 +106,7 @@ artist_input = form.text_input("**Search for an Artist**", placeholder="Enter ar
 search = form.form_submit_button(label='Search')
 
 if artist_input != "":
-    # search for artist based on text input (name), limited to 10 results
-    search_response = requests.get(
-        spotify_base_url + 'search?q={artist_name}&type=artist&limit=10'.format(artist_name=artist_input),
-        headers=headers)
-    search_dict = search_response.json()
+    search_dict = get_artist_results(artist_input)
 
     artist_results = []
     artist_dict_indices = []
@@ -93,9 +114,7 @@ if artist_input != "":
         # exclude artists with no top songs (only check low popularity to decrease number of API calls)
         if search_dict["artists"]["items"][i]["popularity"] <= 25:
             id = search_dict["artists"]["items"][i]["id"]
-            t_response = requests.get(spotify_base_url + 'artists/{id}/top-tracks'.format(id=id),
-                                      headers=headers)
-            t_dict = t_response.json()
+            t_dict = get_top_tracks(id)
 
             if len(t_dict["tracks"]) > 2:
                 artist_results.append(search_dict["artists"]["items"][i]["name"])
@@ -113,9 +132,7 @@ if artist_input != "":
         artist_index = artist_dict_indices[artist_index]
         artist_id = search_dict["artists"]["items"][artist_index]["id"]
 
-        tracks_response = requests.get(spotify_base_url + 'artists/{id}/top-tracks'.format(id=artist_id),
-                                       headers=headers)
-        tracks_dict = tracks_response.json()
+        tracks_dict = get_top_tracks(artist_id)
 
         st.divider()
 
@@ -256,10 +273,7 @@ if artist_input != "":
 
         album_ids = album_ids[:len(album_ids) - 1]
 
-        # get more songs from selected albums to populate playlist (will return in order of decreasing popularity)
-        albums_response = requests.get(spotify_base_url + 'albums?ids={ids}'.format(ids=album_ids),
-                                       headers=headers)
-        albums_dict = albums_response.json()
+        albums_dict = get_albums(album_ids)
 
         if "albums" not in albums_dict:
             st.error("Selected artist has no albums.")
